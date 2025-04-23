@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# Datasets and model outputs
+*.csv
+*.npy
+*.pt
+*.data
+
+# Logs
+*.log
+
+# OS/system files
+.DS_Store
+.env
+.venv/
+*.swp
+
+# Environment config
+nlp_fp_env/
