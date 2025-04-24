@@ -59,7 +59,7 @@ class BertSentimentClassifier(torch.nn.Module):
         ### TODO
         # Get BERT outputs
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
-        pooled_output = outputs.pooler_output  # CLS token representation
+        pooled_output = outputs["pooler_output"]
 
         # Apply dropout and classification layer
         pooled_output = self.dropout(pooled_output)
