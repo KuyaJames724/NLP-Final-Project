@@ -35,31 +35,48 @@ class AdamW(Optimizer):
             for p in group["params"]:
                 if p.grad is None:
                     continue
+
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError("Adam does not support sparse gradients, please consider SparseAdam instead")
 
-                # State should be stored in this dictionary
+                # State initialization
                 state = self.state[p]
+                if len(state) == 0:
+                    state["step"] = 0
+                    state["m"] = torch.zeros_like(p.data)
+                    state["v"] = torch.zeros_like(p.data)
 
-                # Access hyperparameters from the `group` dictionary
-                alpha = group["lr"]
+                m, v = state["m"], state["v"]
+                beta1, beta2 = group["betas"]
+                eps = group["eps"]
+                lr = group["lr"]
+                weight_decay = group["weight_decay"]
+                correct_bias = group["correct_bias"]
 
-                # Complete the implementation of AdamW here, reading and saving
-                # your state in the `state` dictionary above.
-                # The hyperparameters can be read from the `group` dictionary
-                # (they are lr, betas, eps, weight_decay, as saved in the constructor).
-                #
-                # 1- Update first and second moments of the gradients
-                # 2- Apply bias correction
-                #    (using the "efficient version" given in https://arxiv.org/abs/1412.6980;
-                #     also given in the pseudo-code in the project description).
-                # 3- Update parameters (p.data).
-                # 4- After that main gradient-based update, update again using weight decay
-                #    (incorporating the learning rate again).
+                # Increment step
+                state["step"] += 1
+                t = state["step"]
 
-                ### TODO
-                raise NotImplementedError
+                # Apply weight decay (AdamW style)
+                if weight_decay != 0:
+                    p.data.mul_(1 - lr * weight_decay)
 
+                # Update biased first moment estimate
+                m.mul_(beta1).add_(grad, alpha=1 - beta1)
+
+                # Update biased second moment estimate
+                v.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                # Compute bias-corrected moment estimates
+                if correct_bias:
+                    m_hat = m / (1 - beta1 ** t)
+                    v_hat = v / (1 - beta2 ** t)
+                else:
+                    m_hat = m
+                    v_hat = v
+
+                # Update parameters using AdamW rule
+                p.data.addcdiv_(m_hat, v_hat.sqrt().add_(eps), value=-lr)
 
         return loss

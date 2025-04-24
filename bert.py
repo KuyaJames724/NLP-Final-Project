@@ -46,7 +46,6 @@ class BertSelfAttention(nn.Module):
     # multiply the attention scores to the value and get back V'
     # next, we need to concat multi-heads and recover the original shape [bs, seq_len, num_attention_heads * attention_head_size = hidden_size]
 
-    ### TODO
     # Scaled dot-product
     dk = query.size(-1)
     scores = torch.matmul(query, key.transpose(-1, -2)) / math.sqrt(dk)
@@ -107,7 +106,6 @@ class BertLayer(nn.Module):
     ln_layer: the layer norm to be applied
     """
     # Hint: Remember that BERT applies to the output of each sub-layer, before it is added to the sub-layer input and normalized 
-    ### TODO
     out = dense_layer(output)
     out = dropout(out)
     out = out + input  # residual connection
@@ -125,7 +123,6 @@ class BertLayer(nn.Module):
     3. a feed forward layer
     4. a add-norm that takes the input and output of the feed forward layer
     """
-    ### TODO
     # Self-attention block
     attention_output = self.self_attention(hidden_states, attention_mask)
     hidden_states = self.add_norm(hidden_states, attention_output, self.attention_dense, self.attention_dropout, self.attention_layer_norm)
@@ -173,14 +170,12 @@ class BertModel(BertPreTrainedModel):
 
     # Get word embedding from self.word_embedding into input_embeds.
     inputs_embeds = self.word_embedding(input_ids)
-    ### TODO
 
 
     # Get position index and position embedding from self.pos_embedding into pos_embeds.
     pos_ids = self.position_ids[:, :seq_length]
 
     pos_embeds = self.pos_embedding(pos_ids)
-    ### TODO
 
 
     # Get token type ids, since we are not consider token type, just a placeholder.
@@ -188,7 +183,6 @@ class BertModel(BertPreTrainedModel):
     tk_type_embeds = self.tk_type_embedding(tk_type_ids)
 
     # Add three embeddings together; then apply embed_layer_norm and dropout and return.
-    ### TODO
     embeddings = inputs_embeds + pos_embeds + tk_type_embeds
     embeddings = self.embed_layer_norm(embeddings)
     embeddings = self.embed_dropout(embeddings)

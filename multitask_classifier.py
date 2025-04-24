@@ -35,67 +35,61 @@ N_SENTIMENT_CLASSES = 5
 
 class MultitaskBERT(nn.Module):
     '''
-    This module should use BERT for 3 tasks:
-
+    This module uses BERT for 3 tasks:
     - Sentiment classification (predict_sentiment)
     - Paraphrase detection (predict_paraphrase)
     - Semantic Textual Similarity (predict_similarity)
     '''
     def __init__(self, config):
         super(MultitaskBERT, self).__init__()
-        # You will want to add layers here to perform the downstream tasks.
-        # Pretrain mode does not require updating bert paramters.
+        # Load pre-trained BERT model
         self.bert = BertModel.from_pretrained('bert-base-uncased')
+        
+        # Freeze or unfreeze BERT parameters based on the mode
         for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
-        ### TODO
-        raise NotImplementedError
-
+            param.requires_grad = config.option == 'finetune'
+        
+        # Task-specific heads
+        self.sentiment_head = nn.Linear(768, 5)  # 5 sentiment classes
+        self.paraphrase_head = nn.Linear(768 * 2, 1)  # Binary classification
+        self.similarity_head = nn.Linear(768 * 2, 1)  # Regression
 
     def forward(self, input_ids, attention_mask):
-        'Takes a batch of sentences and produces embeddings for them.'
-        # The final BERT embedding is the hidden state of [CLS] token (the first token)
-        # Here, you can start by just returning the embeddings straight from BERT.
-        # When thinking of improvements, you can later try modifying this
-        # (e.g., by adding other layers).
-        ### TODO
-        raise NotImplementedError
-
+        '''
+        Takes a batch of sentences and produces embeddings for them.
+        Returns the [CLS] token embeddings from BERT.
+        '''
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        cls_embeddings = outputs['last_hidden_state'][:, 0, :]  # [CLS] token embeddings
+        return cls_embeddings
 
     def predict_sentiment(self, input_ids, attention_mask):
-        '''Given a batch of sentences, outputs logits for classifying sentiment.
-        There are 5 sentiment classes:
-        (0 - negative, 1- somewhat negative, 2- neutral, 3- somewhat positive, 4- positive)
-        Thus, your output should contain 5 logits for each sentence.
         '''
-        ### TODO
-        raise NotImplementedError
-
-
-    def predict_paraphrase(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit for predicting whether they are paraphrases.
-        Note that your output should be unnormalized (a logit); it will be passed to the sigmoid function
-        during evaluation, and handled as a logit by the appropriate loss function.
+        Given a batch of sentences, outputs logits for classifying sentiment.
         '''
-        ### TODO
-        raise NotImplementedError
+        cls_embeddings = self.forward(input_ids, attention_mask)
+        logits = self.sentiment_head(cls_embeddings)
+        return logits
 
-
-    def predict_similarity(self,
-                           input_ids_1, attention_mask_1,
-                           input_ids_2, attention_mask_2):
-        '''Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
-        Note that your output should be unnormalized (a logit).
+    def predict_paraphrase(self, input_ids_1, attention_mask_1, input_ids_2, attention_mask_2):
         '''
-        ### TODO
-        raise NotImplementedError
+        Given a batch of pairs of sentences, outputs a single logit for predicting whether they are paraphrases.
+        '''
+        cls_embeddings_1 = self.forward(input_ids_1, attention_mask_1)
+        cls_embeddings_2 = self.forward(input_ids_2, attention_mask_2)
+        concatenated = torch.cat((cls_embeddings_1, cls_embeddings_2), dim=1)
+        logit = self.paraphrase_head(concatenated)
+        return logit
 
-
+    def predict_similarity(self, input_ids_1, attention_mask_1, input_ids_2, attention_mask_2):
+        '''
+        Given a batch of pairs of sentences, outputs a single logit corresponding to how similar they are.
+        '''
+        cls_embeddings_1 = self.forward(input_ids_1, attention_mask_1)
+        cls_embeddings_2 = self.forward(input_ids_2, attention_mask_2)
+        concatenated = torch.cat((cls_embeddings_1, cls_embeddings_2), dim=1)
+        logit = self.similarity_head(concatenated)
+        return logit
 
 
 def save_model(model, optimizer, args, config, filepath):
@@ -145,6 +139,9 @@ def train_multitask(args):
     optimizer = AdamW(model.parameters(), lr=lr)
     best_dev_acc = 0
 
+    # Start timing
+    start = time.time()
+
     # Run for the specified number of epochs
     for epoch in range(args.epochs):
         model.train()
@@ -179,12 +176,15 @@ def train_multitask(args):
 
         print(f"Epoch {epoch}: train loss :: {train_loss :.3f}, train acc :: {train_acc :.3f}, dev acc :: {dev_acc :.3f}")
 
+    # End timing
+    end = time.time()
+    print(f"Total fine-tuning time: {end - start:.2f} seconds")
 
 
 def test_model(args):
     with torch.no_grad():
         device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
-        saved = torch.load(args.filepath)
+        saved = torch.load(args.filepath, weights_only=False) # Because of PyTorch 2.6+ safety setting weights_only to True by default
         config = saved['model_config']
 
         model = MultitaskBERT(config)
