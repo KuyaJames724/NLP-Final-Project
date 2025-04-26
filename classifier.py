@@ -37,31 +37,27 @@ class BertSentimentClassifier(torch.nn.Module):
         self.num_labels = config.num_labels
         self.bert = BertModel.from_pretrained('bert-base-uncased')
 
-        # Pretrain mode does not require updating bert paramters.
+        # Pretrain mode does not require updating BERT parameters.
         for param in self.bert.parameters():
-            if config.option == 'pretrain':
-                param.requires_grad = False
-            elif config.option == 'finetune':
-                param.requires_grad = True
+            param.requires_grad = config.option == 'finetune'
 
-        ### TODO
-        # Dropout layer after the BERT pooled output
-        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
-        # Linear layer for classification
+        # Classification head: a linear layer to map BERT's output to sentiment classes
         self.classifier = torch.nn.Linear(config.hidden_size, self.num_labels)
 
+        # Dropout layer for regularization
+        self.dropout = torch.nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, input_ids, attention_mask):
-        '''Takes a batch of sentences and returns logits for sentiment classes'''
-        # The final BERT contextualized embedding is the hidden state of [CLS] token (the first token).
-        # HINT: you should consider what is the appropriate output to return given that
-        # the training loop currently uses F.cross_entropy as the loss function.
-        ### TODO
-        # Get BERT outputs
+        '''
+        Takes a batch of sentences and returns logits for sentiment classes.
+        '''
+        # Pass input through BERT
         outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+
+        # Use the [CLS] token representation (pooler_output) for classification
         pooled_output = outputs["pooler_output"]
 
-        # Apply dropout and classification layer
+        # Apply dropout and pass through the classification head
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
@@ -147,20 +143,20 @@ def load_data(filename, flag='train'):
     num_labels = {}
     data = []
     if flag == 'test':
-        with open(filename, 'r') as fp:
-            for record in csv.DictReader(fp,delimiter = '\t'):
+        with open(filename, 'r', encoding='utf-8') as fp:  # Specify utf-8 encoding
+            for record in csv.DictReader(fp, delimiter='\t'):
                 sent = record['sentence'].lower().strip()
                 sent_id = record['id'].lower().strip()
-                data.append((sent,sent_id))
+                data.append((sent, sent_id))
     else:
-        with open(filename, 'r') as fp:
-            for record in csv.DictReader(fp,delimiter = '\t'):
+        with open(filename, 'r', encoding='utf-8') as fp:  # Specify utf-8 encoding
+            for record in csv.DictReader(fp, delimiter='\t'):
                 sent = record['sentence'].lower().strip()
                 sent_id = record['id'].lower().strip()
                 label = int(record['sentiment'].strip())
                 if label not in num_labels:
                     num_labels[label] = len(num_labels)
-                data.append((sent, label,sent_id))
+                data.append((sent, label, sent_id))
         print(f"load {len(data)} data from {filename}")
 
     if flag == 'train':
@@ -170,28 +166,32 @@ def load_data(filename, flag='train'):
 
 # Evaluate the model for accuracy.
 def model_eval(dataloader, model, device):
-    model.eval() # switch to eval model, will turn off randomness like dropout
+    model.eval()  # switch to eval mode, will turn off randomness like dropout
     y_true = []
     y_pred = []
     sents = []
     sent_ids = []
     for step, batch in enumerate(tqdm(dataloader, desc=f'eval', disable=TQDM_DISABLE)):
-        b_ids, b_mask, b_labels, b_sents, b_sent_ids = batch['token_ids'],batch['attention_mask'],  \
-                                                        batch['labels'], batch['sents'], batch['sent_ids']
-                                                      
+        b_ids, b_mask, b_labels, b_sents, b_sent_ids = batch['token_ids'], batch['attention_mask'], \
+                                                       batch['labels'], batch['sents'], batch['sent_ids']
 
         b_ids = b_ids.to(device)
         b_mask = b_mask.to(device)
+        b_labels = b_labels.to(device)
 
         logits = model(b_ids, b_mask)
-        logits = logits.detach().cpu().numpy()
+        logits = logits.detach().cpu().numpy()  # Move logits to CPU
         preds = np.argmax(logits, axis=1).flatten()
 
-        b_labels = b_labels.flatten()
+        b_labels = b_labels.cpu().numpy()  # Move labels to CPU
         y_true.extend(b_labels)
         y_pred.extend(preds)
         sents.extend(b_sents)
         sent_ids.extend(b_sent_ids)
+
+    # Convert y_true and y_pred to NumPy arrays
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
 
     f1 = f1_score(y_true, y_pred, average='macro')
     acc = accuracy_score(y_true, y_pred)
@@ -240,6 +240,7 @@ def save_model(model, optimizer, args, config, filepath):
 
 def train(args):
     device = torch.device('cuda') if args.use_gpu else torch.device('cpu')
+    print(f"Using GPU: {torch.cuda.is_available()}")
     # Load data
     # Create the data and its corresponding datasets and dataloader
     train_data, num_labels = load_data(args.train, 'train')
@@ -359,8 +360,9 @@ def get_args():
 if __name__ == "__main__":
     args = get_args()
     seed_everything(args.seed)
-    #args.filepath = f'{args.option}-{args.epochs}-{args.lr}.pt'
+#args.filepath = f'{args.option}-{args.epochs}-{args.lr}.pt'
 
+    # Pretraining on SST
     print('Training Sentiment Classifier on SST...')
     config = SimpleNamespace(
         filepath='sst-classifier.pt',
@@ -373,16 +375,23 @@ if __name__ == "__main__":
         dev='data/ids-sst-dev.csv',
         test='data/ids-sst-test-student.csv',
         option=args.option,
-        dev_out = 'predictions/'+args.option+'-sst-dev-out.csv',
-        test_out = 'predictions/'+args.option+'-sst-test-out.csv'
+        dev_out='predictions/' + args.option + '-sst-dev-out.csv',
+        test_out='predictions/' + args.option + '-sst-test-out.csv'
     )
 
+    start = time.time()  # Start timing
     train(config)
+    end = time.time()  # End timing
+    print(f"Total pretraining time on SST: {end - start:.2f} seconds")
 
     print('Evaluating on SST...')
+    start = time.time()  # Start timing
     test(config)
+    end = time.time()  # End timing
+    print(f"Total evaluation time on SST: {end - start:.2f} seconds")
 
-    print('Training Sentiment Classifier on cfimdb...')
+    # Fine-tuning on CFIMDB
+    print('Training Sentiment Classifier on CFIMDB...')
     config = SimpleNamespace(
         filepath='cfimdb-classifier.pt',
         lr=args.lr,
@@ -394,11 +403,17 @@ if __name__ == "__main__":
         dev='data/ids-cfimdb-dev.csv',
         test='data/ids-cfimdb-test-student.csv',
         option=args.option,
-        dev_out = 'predictions/'+args.option+'-cfimdb-dev-out.csv',
-        test_out = 'predictions/'+args.option+'-cfimdb-test-out.csv'
+        dev_out='predictions/' + args.option + '-cfimdb-dev-out.csv',
+        test_out='predictions/' + args.option + '-cfimdb-test-out.csv'
     )
 
+    start = time.time()  # Start timing
     train(config)
+    end = time.time()  # End timing
+    print(f"Total fine-tuning time on CFIMDB: {end - start:.2f} seconds")
 
-    print('Evaluating on cfimdb...')
+    print('Evaluating on CFIMDB...')
+    start = time.time()  # Start timing
     test(config)
+    end = time.time()  # End timing
+    print(f"Total evaluation time on CFIMDB: {end - start:.2f} seconds")
