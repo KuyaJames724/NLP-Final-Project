@@ -375,7 +375,7 @@ if __name__ == "__main__":
         dev='data/ids-sst-dev.csv',
         test='data/ids-sst-test-student.csv',
         option=args.option,
-        dev_out='pretain/' + args.option + '-sst-dev-out.csv',
+        dev_out='pretrain/' + args.option + '-sst-dev-out.csv',
         test_out='pretrain/' + args.option + '-sst-test-out.csv'
     )
 

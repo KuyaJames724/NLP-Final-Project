@@ -69,10 +69,12 @@ python multitask_classifier.py --option finetune --epochs 10 --batch_size 8 --us
 ### SST Accuracy
 
 - Pretraining Dev Accuracy: 32.2%
+- Fine-tuning Dev Accuracy: 51.5%
 
 ### CFIMDB Accuracy
 
 - Pretraining Dev Accuracy: 57.1%
+- Fine-tuning Dev Accuracy: 97.6%
 
 ### Quora & STS
 
