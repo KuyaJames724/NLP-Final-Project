@@ -48,6 +48,9 @@ class MultitaskBERT(nn.Module):
         # Freeze or unfreeze BERT parameters based on the mode
         for param in self.bert.parameters():
             param.requires_grad = config.option == 'finetune'
+
+        #dropout for regularization
+        self.dropout = nn.Dropout(p=0.1)
         
         # Task-specific heads
         self.sentiment_head = nn.Linear(768, 5)  # 5 sentiment classes
@@ -68,6 +71,7 @@ class MultitaskBERT(nn.Module):
         Given a batch of sentences, outputs logits for classifying sentiment.
         '''
         cls_embeddings = self.forward(input_ids, attention_mask)
+        cls_embeddings = self.dropout(cls_embeddings) #dropout
         logits = self.sentiment_head(cls_embeddings)
         return logits
 
@@ -78,6 +82,7 @@ class MultitaskBERT(nn.Module):
         cls_embeddings_1 = self.forward(input_ids_1, attention_mask_1)
         cls_embeddings_2 = self.forward(input_ids_2, attention_mask_2)
         concatenated = torch.cat((cls_embeddings_1, cls_embeddings_2), dim=1)
+        concatenated = self.dropout(concatenated) #Dropout 
         logit = self.paraphrase_head(concatenated)
         return logit
 
@@ -88,6 +93,7 @@ class MultitaskBERT(nn.Module):
         cls_embeddings_1 = self.forward(input_ids_1, attention_mask_1)
         cls_embeddings_2 = self.forward(input_ids_2, attention_mask_2)
         concatenated = torch.cat((cls_embeddings_1, cls_embeddings_2), dim=1)
+        concatenated = self.dropout(concatenated) #Dropout 
         logit = self.similarity_head(concatenated)
         return logit
 
