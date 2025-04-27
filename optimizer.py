@@ -58,9 +58,9 @@ class AdamW(Optimizer):
                 state["step"] += 1
                 t = state["step"]
 
-                # Apply weight decay (AdamW style)
+                # Apply decoupled weight decay directly to grad
                 if weight_decay != 0:
-                    p.data.mul_(1 - lr * weight_decay)
+                    grad = grad.add(p.data, alpha=weight_decay)
 
                 # Update biased first moment estimate
                 m.mul_(beta1).add_(grad, alpha=1 - beta1)
